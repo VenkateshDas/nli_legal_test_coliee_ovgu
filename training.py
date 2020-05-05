@@ -110,7 +110,7 @@ def BiRNN(x, weights, bias):
                 bias:       bias corresponding to the weights.
         
         Returns:
-            1. maladd() applied over last outputs with corresponding weights and bias
+            1. muladd() applied over last outputs with corresponding weights and bias
             2. concatenated forward and backward cell states
             3. whole rnn output
     '''
@@ -240,16 +240,19 @@ def run_train(session, train_x, train_y):
                       "{:.3f}".format(acc_train))
                     print(" Validation Loss = {:.4f}".format(loss_val) + ", Validation Accuracy= {:.3f}".format(acc_val))
                     
-                    #...... EARLY STOPPING......
+                    #...... BEGIN EARLY STOPPING EVALUATION ......
                     
                     # CONDITION: 
-                    # 1. If validation loss has not decreased since 20 steps
-                    #   1.1. If the average of last 20 iterations are less than 0.72
+                    # 1) If validation loss has not decreased since 'patience' steps
+                    #   1.1) If the average of last 'patience' iterations are less than 0.72
+                    
+                    # Step (1) alone might not be a good idea since our network is unstable. Hence introduced one more trigger (1.1) that checks avg change of loss over 'patience' steps 
+                    # The average cut-off value which is to be considered in step (1.1) can be considered as a hyper-parameter
                     
                     costs_inter.append(loss_val)        # append validation loss to costs_inter
                     
                     if loss_val < best_loss_val:        # if improved validation loss found
-#                        print('Better model found!')
+                        # print('Better model found!')
                         
                         best_loss_val = loss_val        # set current validation loss to best_loss_val
                         best_train_acc = acc_train      # set current training accuracy to best_train_acc
@@ -285,11 +288,11 @@ def run_train(session, train_x, train_y):
                             best_train_acc = 0  
                             
                     
-                    #...... EARLY STOPPING......
+                    #...... END EARLY STOPPING EVALUATION ......
                     
                     if epoch == training_steps:
-                        final_states.append(np.array(state_train))                                                               # append training_states to final_states 
-                        final_states.append(np.array(state_val))                                                                 # append validation_states to final_states
+                        final_states.append(np.array(state_train))      # append training_states to final_states 
+                        final_states.append(np.array(state_val))        # append validation_states to final_states
                         _ = saver.save(sess, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)                         # save model to local
                         print('\nBest result: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
                         
