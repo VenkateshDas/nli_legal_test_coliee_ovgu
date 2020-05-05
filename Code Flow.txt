@@ -1,0 +1,24 @@
+1. Preprocess raw training set and save it to local: preprocessing_sabines_dataset.py
+	1.1 Set path of Sabine_training_data.xml to RAW_TRAIN_DATA variable in preprocessing_sabines_dataset.py
+	1.2 Run preprocessing_sabines_dataset.py and output json file will be saved to local
+
+2. Train LSTM model using the preprocessed json training set saved in step 1.2 : training.py
+	2.1 Set path for all required variables if necessary. Otherwise models, states and logs get saved to already mentioned relative path.
+	2.2 Run training.py and models at various will be saved to local
+
+3. Test LSTM model using Test set: test.py
+	3.1 Set path for RAW_TEST_DATA, LABELS_FILE & MODEL_FILE - MODEL_FILE path refers to which model you want to test from the 'models' folder
+	3.2 Open 'checkpoint' file in 'models' folder. 
+		3.2.1 Copy the same model for which the MODEL_FILE was set to.
+		3.2.2 Replace the model written in quotes in the first line of this file with the copied model
+		The first line mentions the latest checkpoint. When we call the latest checkpoint in our program, it should be same as that of MODEL_FILE.
+		Otherwise, the saved tensor graph and tensor variables won't match.
+
+
+===========================================================================================================================================================
+
+NOTE:
+* Step 1 needs to be run only once 
+* In order to train each time, start from step 2 if step 1 ran atleast once. 
+* Make sure the required MODEL_FILE and latest checkpoint model matches before executing step 3 
+	
