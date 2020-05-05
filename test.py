@@ -21,9 +21,9 @@ from keras.utils.np_utils import to_categorical
 Location of file(s) required to run the program
 ################################################'''
 
-RAW_TEST_DATA = "dataset/TestData_en.xml"
-LABELS_FILE = "dataset/test_labels.txt"
-MODEL_FILE = "models/m_0.5699999928474426_0.5476190447807312.ckpt-9230.meta"
+RAW_TEST_DATA = "dataset/TestData_en.xml"           # set file location to raw test xml
+LABELS_FILE = "dataset/test_labels.txt"             # set file location to test labels
+MODEL_FILE = "models/m_0.5699999928474426_0.5476190447807312.ckpt-9230.meta"   # desired model to be restored
 
 
 if os.path.exists('preprocessed_test_set.json'):
@@ -46,8 +46,8 @@ Get data (premise, hypothesis, labels) for training
 X_test = dp.get_data(PREPROCESSED_TEST_SET, "TEST")                 # Parse and get X_test data
 print('\nTest set parsing complete.')
 
-y_test = []                                                         # Read labels from text file
-with open(LABELS_FILE, "r", errors='ignore') as test_labels:        
+y_test = []                                                         
+with open(LABELS_FILE, "r", errors='ignore') as test_labels:        # Read labels from text file
     for line in test_labels:
         y_test.append(line.split(' ')[1])
 
@@ -86,13 +86,12 @@ def BiRNN(x, weights, bias, state_c, state_h):
                 state_h:    final hidden state of the trained model
         
         Returns:
-                1. maladd() applied over last outputs with corresponding weights and bias
+                1. muladd() applied over last outputs with corresponding weights and bias
                 2. concatenated forward and backward cell states
                 3. whole rnn output
     '''
     x = tf.unstack(x, timesteps, 1)
     output = x   
-            
     output = tf.nn.relu(tf.matmul(output, tf.cast(weights['w1'], tf.float32)) + bias['b1'])     # weights introduced to use relu activation
     output = tf.unstack(output, timesteps, 0)
      
