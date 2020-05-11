@@ -20,8 +20,8 @@ from sklearn.model_selection import train_test_split
 import tensorflow as tf
 from tensorflow.contrib import rnn
 from keras.utils.np_utils import to_categorical
-import tensorflow.python.util.deprecation as deprecation
-deprecation._PRINT_DEPRECATION_WARNINGS = False
+# import tensorflow.python.util.deprecation as deprecation
+# deprecation._PRINT_DEPRECATION_WARNINGS = False
 
 
 '''############################################################
@@ -56,12 +56,12 @@ Define & initialize constants for lstm architecture
 
 # Training Parameters
 learning_rate = 0.000001
-num_input = X_train.shape[2]            # dimension of each sentence 
+num_input = X_train.shape[2]            # dimension of each sentence
 timesteps = X_train.shape[1]            # timesteps
-num_hidden = {1: 128, 2: 64}            # dictionary that defines number of neurons per layer 
+num_hidden = {1: 128, 2: 64}            # dictionary that defines number of neurons per layer
 num_classes = 2                         # total number of classes
 num_layers = 1                          # desired number of LSTM layers
-    
+
 weight_decay = 0.000001                 # hyperparameter for regularizer
 input_p, output_p = 0.5, 0.5            # dropouts for regularization
 
@@ -77,7 +77,7 @@ del premise_hypo_pair, correct_labels   # delete unused variables to free RAM
 # Clears the default graph stack and resets the global default graph. The default graph is a property of the current thread.
 # Once a graph is created, all placeholders, variables and any elements are actually part of the current thread.
 # If we need to re-execute any of the tensorflow related code again, you need to reset the graph to its default state.
-tf.compat.v1.reset_default_graph() 
+tf.compat.v1.reset_default_graph()
 
 # Declare placeholders for input and labels that is required for tensor graph
 X = tf.compat.v1.placeholder("float", [None, timesteps, num_input])
@@ -100,50 +100,50 @@ fc_biases = {
 '''#######################################################
 Define BiLSTM network architecture
 #######################################################'''
-   
+
 def BiRNN(x, weights, bias):
     '''
         BiRNN: Defines the architecture of LSTM network for training
-        Args: 
+        Args:
                 x:          premise_hypothesis pair
-                weights:    weights required to apply relu activation function over hidden layer and softmax activation over output layer 
+                weights:    weights required to apply relu activation function over hidden layer and softmax activation over output layer
                 bias:       bias corresponding to the weights.
-        
+
         Returns:
             1. muladd() applied over last outputs with corresponding weights and bias
             2. concatenated forward and backward cell states
             3. whole rnn output
     '''
     x = tf.unstack(x, timesteps, 1)
-    output = x   
-    
+    output = x
+
     for i in range(num_layers):
-        
+
         lstm_fw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0)          # define forward lstm cell with hidden cells
         lstm_fw_cell = rnn.DropoutWrapper(lstm_fw_cell, output_keep_prob=0.5)       # define dropout over hidden forward lstm cell
         lstm_bw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0)          # define backward lstm cell with hidden cells
         lstm_bw_cell = rnn.DropoutWrapper(lstm_bw_cell,  output_keep_prob=0.5)      # define dropout over hidden backward lstm cell
-            
+
         output = tf.nn.relu(tf.matmul(output, tf.cast(weights['w1'], tf.float32)) + bias['b1'])     # weights introduced to use relu activation
-        output = tf.unstack(output, timesteps, 0) 
-        
+        output = tf.unstack(output, timesteps, 0)
+
         with tf.compat.v1.variable_scope('lstm'+str(i)):
             try:
                 output, state_fw, state_bw = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, output, dtype=tf.float32)
             except Exception: # Old TensorFlow version only returns outputs not states
                 output = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, output, dtype=tf.float32)
-            
+
             #Venky: concatinating the forward  and the backward cell states of the Rnn cell
             if i == num_layers-1: #last layer
                 state_c = tf.concat([state_fw.c, state_bw.c], axis=1, name='bidirectional_concat_c')
                 state_h = tf.concat([state_fw.h, state_bw.h], axis=1, name='bidirectional_concat_h')
-            
+
             # Venky: rnn cell output  --> currently this is not used for LSTMVis
             outputs = tf.unstack(output, timesteps, 0)
-            outputs = tf.transpose(outputs, perm=[1, 0, 2]) 
-    
+            outputs = tf.transpose(outputs, perm=[1, 0, 2])
+
     return tf.add(tf.matmul(output[-1], weights['out']), bias['out']), state_c, state_h, outputs
-    
+
 '''############################################################
 Define: activation, loss, regularization, optimizer,
         prediction, accuracy, gradient clipping
@@ -156,21 +156,21 @@ tf.compat.v1.summary.histogram("prediction", prediction)    # write predicted va
 
 
 with tf.name_scope("loss"):
-    loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=y))      # calculate loss 
-    tf.compat.v1.summary.scalar('loss_op', loss_op)                                                 # write loss values to tensorboard summary 
+    loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=y))      # calculate loss
+    tf.compat.v1.summary.scalar('loss_op', loss_op)                                                 # write loss values to tensorboard summary
                                                                                                     # (histogram visualization)
-    
+
     regularizer= tf.nn.l2_loss(fc_weights['out'])                                                   # apply regularizer over output weights
     loss_op = loss_op + weight_decay * regularizer                                                  # add regularization term with loss.
-    
+
     #     optimizer = tf.compat.v1.train.RMSPropOptimizer(learning_rate)
     optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate)                                     # apply Adam Optimizer for loss optimization
     gvs = optimizer.compute_gradients(loss_op)                                                      # fetch gradient values
     capped_gvs = [(tf.clip_by_value(grad, -0.1, 0.1), var) for grad, var in gvs]                    # clip each gradient value within the limit
-    
+
     train_op = optimizer.apply_gradients(gvs)                                                       # applied clipped gradients
     #     train_op = optimizer.minimize(loss_op)
-   
+
 
 with tf.name_scope("accuracy"):
     correct_predictions = tf.equal(tf.argmax(prediction, 1), tf.argmax(y, 1))                       # obtain correct predictions on comparison with actual labels
@@ -184,7 +184,7 @@ Begin training
 
 def run_train(session, train_x, train_y):
     '''
-    Description:    Trains the BiLSTM model with given training set in batches and returns final training results and states 
+    Description:    Trains the BiLSTM model with given training set in batches and returns final training results and states
     Input:          1. session: Tensorflow session
                     2. train_x: training set of padded premise_hypothesis sequences
                     3. train_y: Two column binary labels that corresponds to the train_x
@@ -199,28 +199,28 @@ def run_train(session, train_x, train_y):
     train_counter = 0
     validation_counter = 0
     final_states = []
-    
-    training_steps = 10000  # epochs
+
+    training_steps = 100  # epochs
     batch_size = 100        # batch size
-    display_step = 10       # displays 
-    
-    #for early stopping :    
+    display_step = 10       # displays
+
+    #for early stopping :
     best_loss_val=1000000   # initializing best validation loss to a higher value.
     best_train_acc = 0      # best training accuracy
     last_improvement=0      # a counter which keeps the record of since when (timesteps/iterations) last improvement was seen
     patience= 10            # the number of epochs without improvement you allow before training should be aborted
     # since the values are updated every 10th iteration, the stopping limit becomes: (patience * 10)
-    
+
     costs = []              # validation costs history
     costs_inter=[]          # intermediate validation costs. These values are only used as a log to keep track of the costs.
     best_loss_observed_epoch = 0
-    
+
     ###################################################
-    
+
     session.run(tf.compat.v1.global_variables_initializer())                # initialize all variables using session
     for epoch in range(1, training_steps + 1):                              # training iterations
 #         train_x, train_y = shuffle(train_x, train_y)
-        inner_split = train_x.shape[0] // batch_size                        # creating batches 
+        inner_split = train_x.shape[0] // batch_size                        # creating batches
         for i in range(inner_split):
             batch_x = train_x[i*batch_size:(i+1)*batch_size]                # generating batches of X_train
             batch_y = train_y[i*batch_size:(i+1)*batch_size]                # generating batches of y_train
@@ -229,31 +229,31 @@ def run_train(session, train_x, train_y):
                 if i==inner_split - 1:
                     summary, loss_train, acc_train, state_train = sess.run([merged, loss_op, accuracy, output], feed_dict={X: batch_x, y: batch_y})
                     train_writer.add_summary(summary, train_counter)
-                    
+
                     summary, loss_val, acc_val, state_val = sess.run([merged, loss_op, accuracy, output], feed_dict={X: X_val, y: y_val})
                     validation_writer.add_summary(summary, validation_counter)
                     train_counter+=display_step
                     validation_counter+=display_step
-                    
+
                     print("Epoch {}, Batch Split {}".format(epoch, i+1) + ", Minibatch Loss= " + \
                       "{:.4f}".format(loss_train) + ", Minibatch Training Accuracy= " + \
                       "{:.3f}".format(acc_train))
                     print(" Validation Loss = {:.4f}".format(loss_val) + ", Validation Accuracy= {:.3f}".format(acc_val))
-                    
+
                     #...... BEGIN EARLY STOPPING EVALUATION ......
-                    
-                    # CONDITION: 
+
+                    # CONDITION:
                     # 1) If validation loss has not decreased since 'patience' steps
                     #   1.1) If the average of last 'patience' iterations are less than 0.72
-                    
-                    # Step (1) alone might not be a good idea since our network is unstable. Hence introduced one more trigger (1.1) that checks avg change of loss over 'patience' steps 
+
+                    # Step (1) alone might not be a good idea since our network is unstable. Hence introduced one more trigger (1.1) that checks avg change of loss over 'patience' steps
                     # The average cut-off value which is to be considered in step (1.1) can be considered as a hyper-parameter
-                    
+
                     costs_inter.append(loss_val)        # append validation loss to costs_inter
-                    
+
                     if loss_val < best_loss_val:        # if improved validation loss found
                         # print('Better model found!')
-                        
+
                         best_loss_val = loss_val        # set current validation loss to best_loss_val
                         best_train_acc = acc_train      # set current training accuracy to best_train_acc
                         best_val_acc = acc_val          # set current validation accuracy to acc_val
@@ -263,13 +263,13 @@ def run_train(session, train_x, train_y):
                         best_loss_observed_epoch = epoch
                     else:
                         last_improvement +=1            # else, increment last_improvement
-                        
+
                     if last_improvement > patience:                         # if no improvement seen over 'patience' number of steps
-                        if (sum(costs_inter)/len(costs_inter)) > 0.72:      # if average of validation loss greater than 0.72 (a hyper-parameter to optimize)      
+                        if (sum(costs_inter)/len(costs_inter)) > 0.72:      # if average of validation loss greater than 0.72 (a hyper-parameter to optimize)
                             # final stopping condition
                             print("\nNo improvement found during the last {} iterations, stopping optimization".format(patience))
                             print("Average validation loss: {}".format(sum(costs_inter)/len(costs_inter)))
-                            final_states.append(np.array(state_train))          # append training_states to final_states            
+                            final_states.append(np.array(state_train))          # append training_states to final_states
                             final_states.append(np.array(state_val))            # append validation_states to final_states
                             return acc_results, loss_results, final_states
                         else:                                                   # else, save checkpoint and reset costs_inter and last_improvement
@@ -278,28 +278,38 @@ def run_train(session, train_x, train_y):
                             print('<<<Checkpoint saved>>>')
                             print('Best result: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
                             to_log = 'Best result: m_{}_{}.ckpt-{}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)
-                            file_op = open(TRAINING_LOG,"a+") 
+                            file_op = open(TRAINING_LOG,"a+")
                             file_op.write(to_log + '\n')
                             file_op.close()
                             print('Continuing Training...')
                             costs_inter = []
                             last_improvement = 0
                             best_loss_val=1000000
-                            best_train_acc = 0  
-                            
-                    
+                            best_train_acc = 0
+
+                    acc_results.append(acc_train) #Changed
+                    loss_results.append(loss_train) #Changed
                     #...... END EARLY STOPPING EVALUATION ......
-                    
-                    if epoch == training_steps:
-                        final_states.append(np.array(state_train))      # append training_states to final_states 
+                #Changed - Here the States will be appended in the Final epoch of all batches. The states of the Validation will be added in the final batch of the final epoch.
+                if epoch == training_steps:
+
+                    print("EPOCH : "+ str(epoch))
+                    print("Batch : "+str(i))
+
+                    final_states.append(np.array(state_train))      # append training_states to final_states
+
+                    if i==inner_split - 1:
+
+                        print("EPOCH : "+ str(epoch))
+                        print("Batch : "+str(i))
+
                         final_states.append(np.array(state_val))        # append validation_states to final_states
                         _ = saver.save(sess, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)                         # save model to local
                         print('\nBest result: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
-                        
-                    acc_results.append(acc_train)
-                    loss_results.append(loss_train)
+
+
     return acc_results, loss_results, final_states
-        
+
 
 saver = tf.compat.v1.train.Saver()
 with tf.compat.v1.Session() as sess:
@@ -308,7 +318,7 @@ with tf.compat.v1.Session() as sess:
     merged = tf.compat.v1.summary.merge_all()
     train_writer = tf.compat.v1.summary.FileWriter(logdir + '/train', sess.graph)
     validation_writer = tf.compat.v1.summary.FileWriter(logdir + '/validation')
-    
+
     start_time = datetime.datetime.now()
     print('Session started at: {}'.format(start_time))
     acc_results, loss_results, final_states = run_train(sess, X_train, y_train)
@@ -316,6 +326,8 @@ with tf.compat.v1.Session() as sess:
     print('Training performance: Accuracy {}, Loss {}'.format(acc_results[-1], loss_results[-1]))
     end_time = datetime.datetime.now()
     print('Total Execution time: {} minutes'.format(end_time.minute - start_time.minute))
+
+    print("The length of the final states : "+str(len(final_states)))
 
     val_1 = final_states[0][0]
     for k in range(len(final_states)):
@@ -325,6 +337,3 @@ with tf.compat.v1.Session() as sess:
 
     with h5py.File(SAVE_STATES_TO+'states.hdf5', 'w') as hf:
         hf.create_dataset("d1",  data= val_1)
-
-
-   
