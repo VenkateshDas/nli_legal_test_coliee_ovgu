@@ -273,7 +273,7 @@ def run_train(session, train_x, train_y):
                         print('Avg validation loss over this period: ', sum(costs_inter)/len(costs_inter))  
                         if (sum(costs_inter)/len(costs_inter)) > 0.72:      # if average of validation loss greater than 0.72 (a hyper-parameter to optimize)      
                             # final stopping condition
-                            print('Avg validation loss > 0.72\nStopping optimization')
+                            print('Avg validation loss > 0.72. Hence stopping training & optimization!')
                             print('Recording training and validation states at cost of early-stopping')
                             # append states to list before stopping training
                             states_inter = np.vstack(states_inter)
