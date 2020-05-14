@@ -10,7 +10,7 @@ import numpy as np
 
 latex_special_token = ["!@#$%^&*()"]
 
-def generate(text_list, attention_list, latex_file, color='red', rescale_value = False):
+def generate(text_list, attention_list, latex_file, color='red', rescale_value = True):
 	assert(len(text_list) == len(attention_list))
 	if rescale_value:
 		attention_list = rescale(attention_list)
@@ -54,7 +54,7 @@ def clean_word(word_list):
 
 # if __name__ == '__main__':
 # 	## This is a demo:
-# 
+#
 # 	sent = '''the USS Ronald Reagan - an aircraft carrier docked in Japan - during his tour of the region, vowing to "defeat any attack and meet any use of conventional or nuclear weapons with an overwhelming and effective American response".
 # North Korea and the US have ratcheted up tensions in recent weeks and the movement of the strike group had raised the question of a pre-emptive strike by the US.
 # On Wednesday, Mr Pence described the country as the "most dangerous and urgent threat to peace and security" in the Asia-Pacific.'''
