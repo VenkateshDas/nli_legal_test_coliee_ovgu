@@ -27,7 +27,8 @@ Location of file(s):
 
 PREPROCESSED_TRAIN_SET = "preprocessed_training_set.json"
 SAVE_MODEL_TO = "models/"
-SAVE_STATES_TO = "states/"
+SAVE_STATES_TO = "states/attention/states.hdf5"
+SAVE_SCORES_TO = "scores/attention/attention_scores.pkl"
 SAVE_LOGS_TO = "TBlogs/"
 TRAINING_LOG = "training_performance_log.txt"
 
@@ -147,6 +148,7 @@ Define: attention , activation, loss, regularization, optimizer,
 with tf.name_scope("attention"):
 
     pre_logits , state_c, state_h, output = BiRNN(X, fc_weights, fc_biases)
+    print(output.shape)
     initializer = tf.random_normal_initializer(stddev=0.1)
     print(output.shape)
     hidden_states = output.shape[2]
@@ -206,6 +208,7 @@ tf.compat.v1.summary.scalar('accuracy', accuracy)
 Begin training
 #######################################################'''
 
+
 def run_train(session, train_x, train_y):
     '''
     Description:    Trains the BiLSTM model with given training set in batches and returns final training results and states
@@ -219,14 +222,11 @@ def run_train(session, train_x, train_y):
     # initialization of local variables and lists:
     acc_results = []
     loss_results = []
-#    os.path.join("TBlogs", datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     train_counter = 0
     validation_counter = 0
-    final_states = []
-    attention_scores = []
 
-    training_steps = 10  # epochs
-    batch_size = 100        # batch size
+    training_steps = 1  # epochs
+    batch_size = 128        # batch size
     display_step = 10       # displays
 
     #for early stopping :
@@ -242,21 +242,33 @@ def run_train(session, train_x, train_y):
 
     ###################################################
 
-    session.run(tf.compat.v1.global_variables_initializer())                # initialize all variables using session
-    for epoch in range(1, training_steps + 1):                              # training iterations
+    session.run(tf.compat.v1.global_variables_initializer())                        # initialize all variables using session
+    for epoch in range(1, training_steps + 1):                                      # training iterations
 #         train_x, train_y = shuffle(train_x, train_y)
-        inner_split = train_x.shape[0] // batch_size                        # creating batches
-        for i in range(inner_split):
-            batch_x = train_x[i*batch_size:(i+1)*batch_size]                # generating batches of X_train
-            batch_y = train_y[i*batch_size:(i+1)*batch_size]                # generating batches of y_train
+        inner_split = train_x.shape[0] // batch_size                                # creating batches
+        states_inter = []
+        scores_inter = []
+        final_states = []                                                           # list to append final training and validation states
+        attention_scores = []                                                       # list to append final training and validation attention scores
+
+        for i in range(inner_split + 1):
+            batch_x = train_x[i*batch_size:(i+1)*batch_size]                        # generating batches of X_train
+            batch_y = train_y[i*batch_size:(i+1)*batch_size]                        # generating batches of y_train
             session.run(train_op, feed_dict={X: batch_x, y: batch_y})
-            if epoch ==1 or epoch % display_step == 0:
-                if i==inner_split - 1:
-                    summary, loss_train, acc_train, state_train , attention_train = sess.run([merged, loss_op, accuracy, output , attention_score ], feed_dict={X: batch_x, y: batch_y})
+
+            if epoch == 1 or epoch % display_step == 0:                             # print and save necessary information about training only at an interval of 'display_step' number of steps to reduce computational complexity
+
+                state_train , attention_train  = session.run([output,attention_score], feed_dict={X: batch_x, y: batch_y})     # extract states for each batch-wise training inputs
+                print(state_train.shape)
+                states_inter.append(np.array(state_train))
+                print(len(states_inter))
+                scores_inter.append(np.array(attention_train))
+                print(len(states_inter))
+                if i == inner_split:                                                # last batch split of the selected epoch
+                    summary, loss_train, acc_train = session.run([merged, loss_op, accuracy], feed_dict={X: batch_x, y: batch_y})
                     train_writer.add_summary(summary, train_counter)
 
-
-                    summary, loss_val, acc_val, state_val , attention_val = sess.run([merged, loss_op, accuracy, output , attention_score ], feed_dict={X: X_val, y: y_val})
+                    summary, loss_val, acc_val, state_val ,attention_val = session.run([merged, loss_op, accuracy, output , attention_score ], feed_dict={X: X_val, y: y_val})
                     validation_writer.add_summary(summary, validation_counter)
                     train_counter+=display_step
                     validation_counter+=display_step
@@ -266,85 +278,84 @@ def run_train(session, train_x, train_y):
                       "{:.3f}".format(acc_train))
                     print(" Validation Loss = {:.4f}".format(loss_val) + ", Validation Accuracy= {:.3f}".format(acc_val))
 
+                    acc_results.append(acc_train)
+                    loss_results.append(loss_train)
+
                     #...... BEGIN EARLY STOPPING EVALUATION ......
 
                     # CONDITION:
-                    # 1) If validation loss has not decreased since 'patience' steps
-                    #   1.1) If the average of last 'patience' iterations are less than 0.72
+                    # 1. If validation loss has not decreased since 20 steps
+                    #   1.1. If the average of last 20 iterations are less than 0.72
 
-                    # Step (1) alone might not be a good idea since our network is unstable. Hence introduced one more trigger (1.1) that checks avg change of loss over 'patience' steps
-                    # The average cut-off value which is to be considered in step (1.1) can be considered as a hyper-parameter
+                    costs_inter.append(loss_val)            # append validation loss to costs_inter
 
-                    costs_inter.append(loss_val)        # append validation loss to costs_inter
-
-                    if loss_val < best_loss_val:        # if improved validation loss found
-                        # print('Better model found!')
-
-                        best_loss_val = loss_val        # set current validation loss to best_loss_val
-                        best_train_acc = acc_train      # set current training accuracy to best_train_acc
-                        best_val_acc = acc_val          # set current validation accuracy to acc_val
-                        costs +=costs_inter             # append intermediate cost history to costs
-                        last_improvement = 0            # reset last_improvement
-                        costs_inter= []                 # reset costs_inter
+                    if loss_val < best_loss_val:            # if improved validation loss found
+                        best_loss_val = loss_val            # set current validation loss to best_loss_val
+                        best_train_acc = acc_train          # set current training accuracy to best_train_acc
+                        best_val_acc = acc_val              # set current validation accuracy to acc_val
+                        costs +=costs_inter                 # append intermediate cost history to costs
+                        last_improvement = 0                # reset last_improvement
+                        costs_inter= []                     # reset costs_inter
                         best_loss_observed_epoch = epoch
                     else:
-                        last_improvement +=1            # else, increment last_improvement
-
-
+                        last_improvement +=1                # else, increment last_improvement
 
                     if last_improvement > patience:                         # if no improvement seen over 'patience' number of steps
+                        print("\nNo improvement found during the last {} iterations".format(patience))
+                        print('Avg validation loss over this period: ', sum(costs_inter)/len(costs_inter))
                         if (sum(costs_inter)/len(costs_inter)) > 0.72:      # if average of validation loss greater than 0.72 (a hyper-parameter to optimize)
                             # final stopping condition
-                            print("\nNo improvement found during the last {} iterations, stopping optimization".format(patience))
-                            print("Average validation loss: {}".format(sum(costs_inter)/len(costs_inter)))
-                            final_states.append(np.array(state_train))          # append training_states to final_states
-                            final_states.append(np.array(state_val))            # append validation_states to final_states
-                            attention_scores.append(np.array(attention_train))
+                            print('Avg validation loss > 0.72. Hence stopping training & optimization!')
+                            print('Recording training and validation states at cost of early-stopping')
+                            # append states to list before stopping training
+                            states_inter = np.vstack(states_inter)
+                            print(states_inter.shape)
+                            final_states.append(states_inter)                       # append training_states to final_states
+                            final_states.append(np.array(state_val))                # append validation_states to final_states
+                            scores_inter = np.vstack(scores_inter)
+                            attention_scores.append(scores_inter)
                             attention_scores.append(np.array(attention_val))
+
                             return acc_results, loss_results, final_states , attention_scores
                         else:                                                   # else, save checkpoint and reset costs_inter and last_improvement
                             print('\nSaving Checkpoint! Avg validation loss < 0.72')
-                            _ = saver.save(sess, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)
+                            _ = saver.save(session, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)
                             print('<<<Checkpoint saved>>>')
-                            print('Best result: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
+                            print('Last improvement: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
+
                             to_log = 'Best result: m_{}_{}.ckpt-{}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)
                             file_op = open(TRAINING_LOG,"a+")
                             file_op.write(to_log + '\n')
                             file_op.close()
+
                             print('Continuing Training...')
                             costs_inter = []
                             last_improvement = 0
-                            best_loss_val=1000000
+                            best_loss_val = 1000000
                             best_train_acc = 0
 
-                    acc_results.append(acc_train)
-                    loss_results.append(loss_train)
+
                     #...... END EARLY STOPPING EVALUATION ......
-                
-                # This change was made because previously, it was considering only the last batch of the final epoch. So now, All the batches in the final epoch will be appended to the final states and the attention scores.
-                if epoch == training_steps: # Change made here , Final Epoch's All batches
 
-                    print("EPOCH : "+str(epoch))
-                    print("BATCH : "+ str(i))
-                    final_states.append(np.array(state_train))      # append training_states to final_states
-                    attention_scores.append(np.array(attention_train))
+                    if epoch == training_steps:                                 # do not change this intendation to make sure this line run only once and not for each split of the epoch!
+                        _ = saver.save(session, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)                         # save model to local
 
-                    print(len(attention_scores))
-                    print(len(final_states))
-                    if i==inner_split - 1: # Final Epoch's Last Batch
-
-                        print("EPOCH : "+str(epoch))
-                        print("BATCH : "+ str(i))
-
-                        final_states.append(np.array(state_val))        # append validation_states to final_states
+                        print('Recording final training and validation states')
+                        # append states to list before ending training
+                        states_inter = np.vstack(states_inter)
+                        print(states_inter.shape)
+                        final_states.append(states_inter)                       # append training_states to final_states
+                        final_states.append(np.array(state_val))                # append validation_states to final_states
+                        scores_inter = np.vstack(scores_inter)
+                        attention_scores.append(scores_inter)
                         attention_scores.append(np.array(attention_val))
 
-                        _ = saver.save(sess, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)                         # save model to local
                         print('\nBest result: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
 
-
-
-    return acc_results, loss_results, final_states , attention_scores
+    print(final_states[0].shape, final_states[1].shape)
+    print(attention_scores[0].shape, attention_scores[1].shape)
+    print("Total attention list " + str(len(attention_scores)))
+    return acc_results, loss_results, final_states, attention_scores
 
 
 saver = tf.compat.v1.train.Saver()
@@ -369,11 +380,24 @@ with tf.compat.v1.Session() as sess:
             temp = final_states[k][i]
             val_1 = np.concatenate((val_1,temp),axis=0)
 
-    with h5py.File(SAVE_STATES_TO+'states.hdf5', 'w') as hf:
+
+    val_1 = final_states[0][0]
+    for k in range(len(final_states)):
+        for i in range(0,len(final_states[k])):
+            temp = final_states[k][i]
+            val_1 = np.concatenate((val_1,temp),axis=0)
+
+
+    print('\nSaving LSTM states...')
+
+    with h5py.File(SAVE_STATES_TO, 'w') as hf:
         hf.create_dataset("d1",  data= val_1)
 
-    f = open('attention_scores.pkl','wb')
+    print('LSTM states saved to {}\{}'.format(os.getcwd(), SAVE_STATES_TO))
+
+    f = open(SAVE_SCORES_TO,'wb')
     pickle.dump(attention_scores,f)
 
-    print(len(attention_scores))
-    print(len(final_states))
+    print('Attention scores saved to {}\{}'.format(os.getcwd(), SAVE_SCORES_TO))
+
+    
