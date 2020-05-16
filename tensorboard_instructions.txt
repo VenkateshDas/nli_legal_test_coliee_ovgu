@@ -1,0 +1,13 @@
+How to launch tensorboard on your local system?
+
+1. Open terminal/cmd
+2. activate virtual environment if reqd.
+	eg: if virtual environment folder name is 'tf'
+	> conda activate tf
+3. Set current directory (current_directory) to the folder where the git data is pulled.
+	> cd current_directory
+4. Launch tensorboard by setting the log directory to the folder of the model (program) of interest.
+	eg: if running the baseline model, the folder used to log the summaries is 'baseline' folder.
+	> tensorboard --logdir="tensorBoardlogs/baseline/" --host localhost --port 6005
+5. Open browser and type:
+	http://localhost:6005/

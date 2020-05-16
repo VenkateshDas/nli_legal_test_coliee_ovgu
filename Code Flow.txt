@@ -2,7 +2,7 @@
 	1.1 Set path of Sabine_training_data.xml to RAW_TRAIN_DATA variable in preprocessing_sabines_dataset.py
 	1.2 Run preprocessing_sabines_dataset.py and output json file will be saved to local
 
-2. Train LSTM model using the preprocessed json training set saved in step 1.2 : training.py
+2. Train LSTM model using the preprocessed json training set saved in step 1.2 : training_baseline.py, training_POS_nltk.py, training_sim_neg.py
 	2.1 Set path for all required variables if necessary. Otherwise models, states and logs get saved to already mentioned relative path.
 	2.2 Run training.py and models at various will be saved to local
 
@@ -14,6 +14,7 @@
 		The first line mentions the latest checkpoint. When we call the latest checkpoint in our program, it should be same as that of MODEL_FILE.
 		Otherwise, the saved tensor graph and tensor variables won't match.
 
+4. The folder structure is maintained for ease of use and understanding of the whole project and not sorted on authors. 
 
 ===========================================================================================================================================================
 
