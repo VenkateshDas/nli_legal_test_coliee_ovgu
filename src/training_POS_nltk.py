@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon May 11 10:29:26 2020
+Created on Thurs Nov 21 18:34:01 2019
 
 @author: Sachin Nandakumar
 """
-
 
 '''#######################################################
                         TRAINING
@@ -14,7 +13,7 @@ import os
 import h5py
 import datetime
 import numpy as np
-from data_parser import data_parser_for_POS as dp
+from data_parser import data_parser_for_baseline as dp
 
 from sklearn.model_selection import train_test_split
 
@@ -31,10 +30,10 @@ Location of file(s):
 ############################################################'''
 
 PREPROCESSED_TRAIN_SET = "../data/preprocessed_data/preprocessed_training_set.json"
-SAVE_MODEL_TO = "../models/nltkPOS/"
-SAVE_STATES_TO = "../states/nltkPOS/states.hdf5"
-SAVE_LOGS_TO = "../tensorBoardLogs/nltkPOS/"
-TRAINING_LOG = "../logs/nltkPOS/training_performance_log.txt"
+SAVE_MODEL_TO = "../models/baseline/"
+SAVE_STATES_TO = "../states/baseline/states.hdf5"
+SAVE_LOGS_TO = "../tensorBoardLogs/baseline/"
+TRAINING_LOG = "../logs/baseline/training_performance_log.txt"
 
 '''############################################################
 Get data (premise, hypothesis, labels) for training
@@ -56,6 +55,7 @@ Define & initialize constants for lstm architecture
 
 # Training Parameters
 learning_rate = 0.000001
+#learning_rate = 0.0001
 num_input = X_train.shape[2]            # dimension of each sentence 
 timesteps = X_train.shape[1]            # timesteps
 num_hidden = {1: 128, 2: 64}            # dictionary that defines number of neurons per layer 
@@ -87,12 +87,10 @@ y = tf.compat.v1.placeholder("float", [None, num_classes])
 initializer = tf.contrib.layers.xavier_initializer()
 
 fc_weights = {
-        'w1': tf.Variable(initializer(([num_input, 2*num_hidden[1]])), name='w_1'),         # these weights are used for relu calculation
         'out' : tf.Variable(initializer(([2*num_hidden[1], num_classes])), name='w_out')    # output weights for applying softmax
         }
 
 fc_biases = {
-        'b1' : tf.Variable(tf.zeros([2*num_hidden[1]]), name='b_1'),                        # bias for relu calculation
         'out' : tf.Variable(tf.zeros([num_classes]), name='b_out')                          # output bias
         }
 
@@ -118,31 +116,27 @@ def BiRNN(x, weights, bias):
     output = x   
     
     for i in range(num_layers):
-        
-        lstm_fw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0)          # define forward lstm cell with hidden cells
-        lstm_fw_cell = rnn.DropoutWrapper(lstm_fw_cell, output_keep_prob=0.5)       # define dropout over hidden forward lstm cell
-        lstm_bw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0)          # define backward lstm cell with hidden cells
-        lstm_bw_cell = rnn.DropoutWrapper(lstm_bw_cell,  output_keep_prob=0.5)      # define dropout over hidden backward lstm cell
+        lstm_fw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define forward lstm cell with hidden cells
+        lstm_fw_cell = rnn.DropoutWrapper(lstm_fw_cell, output_keep_prob=0.5)                               # define dropout over hidden forward lstm cell
+        lstm_bw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define backward lstm cell with hidden cells
+        lstm_bw_cell = rnn.DropoutWrapper(lstm_bw_cell,  output_keep_prob=0.5)                              # define dropout over hidden backward lstm cell
             
-        output = tf.nn.relu(tf.matmul(output, tf.cast(weights['w1'], tf.float32)) + bias['b1'])     # weights introduced to use relu activation
-        output = tf.unstack(output, timesteps, 0) 
-        
         with tf.compat.v1.variable_scope('lstm'+str(i)):
             try:
-                output, state_fw, state_bw = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, output, dtype=tf.float32)
+                output, _, _ = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, output, dtype=tf.float32)
             except Exception: # Old TensorFlow version only returns outputs not states
                 output = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, output, dtype=tf.float32)
             
             #Venky: concatinating the forward  and the backward cell states of the Rnn cell
-            if i == num_layers-1: #last layer
-                state_c = tf.concat([state_fw.c, state_bw.c], axis=1, name='bidirectional_concat_c')
-                state_h = tf.concat([state_fw.h, state_bw.h], axis=1, name='bidirectional_concat_h')
+            # if i == num_layers-1: #last layer
+            #     state_c = tf.concat([state_fw.c, state_bw.c], axis=1, name='bidirectional_concat_c')
+            #     state_h = tf.concat([state_fw.h, state_bw.h], axis=1, name='bidirectional_concat_h')
             
             # Venky: rnn cell output  --> currently this is not used for LSTMVis
             outputs = tf.unstack(output, timesteps, 0)
             outputs = tf.transpose(outputs, perm=[1, 0, 2]) 
-            
-    return tf.add(tf.matmul(output[-1], weights['out']), bias['out']), state_c, state_h, outputs
+    
+    return tf.add(tf.matmul(output[-1], weights['out']), bias['out']), outputs
     
 '''############################################################
 Define: activation, loss, regularization, optimizer,
@@ -150,7 +144,7 @@ Define: activation, loss, regularization, optimizer,
 ############################################################'''
 
 with tf.name_scope("output"):
-    logits, _, _, output = BiRNN(X, fc_weights, fc_biases)
+    logits, output = BiRNN(X, fc_weights, fc_biases)
     prediction = tf.nn.softmax(logits, name='prediction')   # applies softmax over BiRNN output to calculate predicted values
 #tf.compat.v1.summary.histogram("prediction", prediction)    # write predicted values to tensorboard summary (histogram visualization)
 
@@ -168,29 +162,12 @@ with tf.name_scope("loss"):
     capped_gvs = [(tf.clip_by_value(grad, -0.1, 0.1), var) for grad, var in gvs]                    # clip each gradient value within the limit
     
     train_op = optimizer.apply_gradients(gvs)                                                       # applied clipped gradients
-    # train_op = optimizer.minimize(loss_op)
+    #     train_op = optimizer.minimize(loss_op)
    
 
 with tf.name_scope("accuracy"):
     correct_predictions = tf.equal(tf.argmax(prediction, 1), tf.argmax(y, 1))                       # obtain correct predictions on comparison with actual labels
     accuracy = tf.reduce_mean(tf.cast(correct_predictions, 'float'), name="accuracy")               # mean of correct predictions
-    
-    # BEGIN: for precision, recall and f1
-    
-    predicted = tf.argmax(prediction, 1)
-    actual = tf.argmax(y, 1)
-    
-    TP = tf.count_nonzero(predicted * actual)
-    TN = tf.count_nonzero((predicted - 1) * (actual - 1))
-    FP = tf.count_nonzero(predicted * (actual - 1))
-    FN = tf.count_nonzero((predicted - 1) * actual)
-    
-    precision = TP / (TP + FP)
-    recall = TP / (TP + FN)
-    f1 = 2 * precision * recall / (precision + recall)
-    
-    # END: for precision, recall and f1
-    
 tf.compat.v1.summary.scalar('accuracy', accuracy)
 
 
@@ -214,7 +191,7 @@ def run_train(session, train_x, train_y):
     train_counter = 0
     validation_counter = 0
     
-    training_steps = 100  # epochs
+    training_steps = 10000 # epochs
     batch_size = 128        # batch size
     display_step = 10       # displays 
     
@@ -248,8 +225,8 @@ def run_train(session, train_x, train_y):
                 state_train = session.run([output], feed_dict={X: batch_x, y: batch_y})     # extract states for each batch-wise training inputs
                 states_inter.append(np.array(state_train)[0])
             
-                if i == inner_split:                                            # last batch split of the selected epoch 
-                    summary, loss_train, acc_train, prec_train, recall_train, f1_train = session.run([merged, loss_op, accuracy, precision, recall, f1], feed_dict={X: batch_x, y: batch_y})
+                if i == inner_split:                                                # last batch split of the selected epoch 
+                    summary, loss_train, acc_train = session.run([merged, loss_op, accuracy], feed_dict={X: batch_x, y: batch_y})
                     train_writer.add_summary(summary, train_counter)
                     
                     summary, loss_val, acc_val, state_val = session.run([merged, loss_op, accuracy, output], feed_dict={X: X_val, y: y_val})
@@ -257,11 +234,9 @@ def run_train(session, train_x, train_y):
                     train_counter+=display_step
                     validation_counter+=display_step
                     
-                    print('Precision: {}, Recall: {}, F1: {}'.format(prec_train, recall_train, f1_train))
-                    
-#                    print("Epoch {}, Batch Split {}".format(epoch, i+1) + ", Minibatch Loss= " + \
-#                      "{:.4f}".format(loss_train) + ", Minibatch Training Accuracy= " + \
-#                      "{:.3f}".format(acc_train))
+                    print("Epoch {}, Batch Split {}".format(epoch, i+1) + ", Minibatch Loss= " + \
+                      "{:.4f}".format(loss_train) + ", Minibatch Training Accuracy= " + \
+                      "{:.3f}".format(acc_train))
                     print(" Validation Loss = {:.4f}".format(loss_val) + ", Validation Accuracy= {:.3f}".format(acc_val))
                     
                     acc_results.append(acc_train)
@@ -291,9 +266,8 @@ def run_train(session, train_x, train_y):
                         print('Avg validation loss over this period: ', sum(costs_inter)/len(costs_inter))  
                         if (sum(costs_inter)/len(costs_inter)) > 0.72:      # if average of validation loss greater than 0.72 (a hyper-parameter to optimize)      
                             # final stopping condition
-                            print('\nAvg validation loss > 0.72. Hence stopping training and optimization!')
+                            print('Avg validation loss > 0.72\nStopping optimization')
                             print('Recording training and validation states at cost of early-stopping')
-                            
                             # append states to list before stopping training
                             states_inter = np.vstack(states_inter)
                             print(states_inter.shape)
@@ -305,14 +279,14 @@ def run_train(session, train_x, train_y):
                             print('\nSaving Checkpoint! Avg validation loss < 0.72')
                             _ = saver.save(session, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)
                             print('<<<Checkpoint saved>>>')
-                            print('Best result: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
+                            print('Last improvement: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
                             
                             to_log = 'Best result: m_{}_{}.ckpt-{}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)
                             file_op = open(TRAINING_LOG,"a+") 
                             file_op.write(to_log + '\n')
                             file_op.close()
                             
-                            print('Continuing Training...')
+                            print('Continuing Training...\n')
                             costs_inter = []
                             last_improvement = 0
                             best_loss_val = 1000000
@@ -321,20 +295,19 @@ def run_train(session, train_x, train_y):
                     
                     #...... END EARLY STOPPING EVALUATION ......
                     
-                    
-                    
-                    if epoch == training_steps:             # do not change this intendation to make sure this line run only once and not for each split of the epoch!
+                    if epoch == training_steps:                                 # do not change this intendation to make sure this line run only once and not for each split of the epoch!
                         _ = saver.save(session, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)                         # save model to local
                         
                         print('Recording final training and validation states')
                         # append states to list before ending training
                         states_inter = np.vstack(states_inter)
                         print(states_inter.shape)
-                        final_states.append(states_inter)                # append training_states to final_states 
+                        final_states.append(states_inter)                       # append training_states to final_states 
                         final_states.append(np.array(state_val))                # append validation_states to final_states
                         
                         print('\nBest result: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
                         
+    print(final_states[0].shape, final_states[1].shape)     
     return acc_results, loss_results, final_states
         
 
@@ -347,7 +320,7 @@ with tf.compat.v1.Session() as sess:
     validation_writer = tf.compat.v1.summary.FileWriter(logdir + '/validation')
     
     start_time = datetime.datetime.now()
-    print('-'*55)
+    print('-'*50)
     print('\nSession started at: {}'.format(start_time))
     acc_results, loss_results, final_states = run_train(sess, X_train, y_train)
 #    summary, loss_val, acc_test, pred_test = sess.run([merged, loss_op, accuracy, prediction, output], feed_dict={X: X_test, y: y_test})
