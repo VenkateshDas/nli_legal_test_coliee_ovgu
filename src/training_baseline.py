@@ -116,14 +116,10 @@ def BiRNN(x, weights, bias):
     output = x   
     
     for i in range(num_layers):
-#        lstm_fw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define forward lstm cell with hidden cells
-#        lstm_fw_cell = rnn.DropoutWrapper(lstm_fw_cell, output_keep_prob=0.5)                               # define dropout over hidden forward lstm cell
-#        lstm_bw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define backward lstm cell with hidden cells
-#        lstm_bw_cell = rnn.DropoutWrapper(lstm_bw_cell,  output_keep_prob=0.5)                              # define dropout over hidden backward lstm cell
-            
-#        or use haste api for LayerNormBiLSTM
-        lstm_fw_cell = rnn.LayerNormBasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu, dropout_keep_prob= 0.5)         # define forward lstm cell with hidden cells
-        lstm_bw_cell = rnn.LayerNormBasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu, dropout_keep_prob= 0.5)           # define backward lstm cell with hidden cells
+       lstm_fw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define forward lstm cell with hidden cells
+       lstm_fw_cell = rnn.DropoutWrapper(lstm_fw_cell, output_keep_prob=0.5)                               # define dropout over hidden forward lstm cell
+       lstm_bw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define backward lstm cell with hidden cells
+       lstm_bw_cell = rnn.DropoutWrapper(lstm_bw_cell,  output_keep_prob=0.5)                              # define dropout over hidden backward lstm cell
             
         with tf.compat.v1.variable_scope('lstm'+str(i)):
             try:
@@ -132,15 +128,15 @@ def BiRNN(x, weights, bias):
                 output = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, output, dtype=tf.float32)
             
             #Venky: concatinating the forward  and the backward cell states of the Rnn cell
-            if i == num_layers-1: #last layer
-                state_c = tf.concat([state_fw.c, state_bw.c], axis=1, name='bidirectional_concat_c')
-                state_h = tf.concat([state_fw.h, state_bw.h], axis=1, name='bidirectional_concat_h')
+#             if i == num_layers-1: #last layer
+#                 state_c = tf.concat([state_fw.c, state_bw.c], axis=1, name='bidirectional_concat_c')
+#                 state_h = tf.concat([state_fw.h, state_bw.h], axis=1, name='bidirectional_concat_h')
             
             # Venky: rnn cell output  --> currently this is not used for LSTMVis
             outputs = tf.unstack(output, timesteps, 0)
             outputs = tf.transpose(outputs, perm=[1, 0, 2]) 
     
-    return tf.add(tf.matmul(output[-1], weights['out']), bias['out']), state_c, state_h, outputs
+    return tf.add(tf.matmul(output[-1], weights['out']), bias['out']), outputs
     
 '''############################################################
 Define: activation, loss, regularization, optimizer,
@@ -148,7 +144,7 @@ Define: activation, loss, regularization, optimizer,
 ############################################################'''
 
 with tf.name_scope("output"):
-    logits, state_c, state_h, output = BiRNN(X, fc_weights, fc_biases)
+    logits, output = BiRNN(X, fc_weights, fc_biases)
     prediction = tf.nn.softmax(logits, name='prediction')   # applies softmax over BiRNN output to calculate predicted values
 #tf.compat.v1.summary.histogram("prediction", prediction)    # write predicted values to tensorboard summary (histogram visualization)
 
