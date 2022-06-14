@@ -85,9 +85,7 @@ def add_sentence_tags(premise, hyp):
     BOS_premise = np.concatenate((BOS, premise), axis=1)                            # concat BOS vector to beginning of premise:- Concatenate to axis 1, since it is word-level concatenation 
     BOS_premise_SEP = np.concatenate((BOS_premise, SEP), axis=1)                    # concat SEP to end of premise 
     BOS_premise_SEP_hyp = np.concatenate((BOS_premise_SEP, hyp), axis=1)            # concat hypothesis to end of SEP
-    BOS_premise_SEP_hyp_EOS = np.concatenate((BOS_premise_SEP_hyp, EOS), axis=1)    # concat EOS to end of hypothesis
-    
-    return BOS_premise_SEP_hyp_EOS
+    return np.concatenate((BOS_premise_SEP_hyp, EOS), axis=1)
 
 def get_data(preprocessed_json_file, datatype="TRAIN"):
     '''
@@ -99,37 +97,37 @@ def get_data(preprocessed_json_file, datatype="TRAIN"):
     Output:         Output of add_sentence_tags() method, labels (only for datatype=TRAIN)
     
     '''
-    
+
     global max_premise_length, max_hypothesis_length
     with open(preprocessed_json_file, 'r') as fp:   
         data = json.load(fp)
-    
+
     premise_sentences = []
     hyp_sentences = []
     labels = [] 
-    
+
     premise_text = []
     hyp_text = []
-    
+
     for _, pair in data.items():
         premise = sentence2sequence(pair['text1'])          # pair['text1'] represents premise sentence
         premise_sentences.append(np.vstack(premise[0]))
         premise_text.append(premise[1])
-        
+
         hyp = sentence2sequence(pair['text2'])              # pair['text2'] represents hypothesis sentence
         hyp_sentences.append(np.vstack(hyp[0]))
         hyp_text.append(hyp[1])
-        
+
         if datatype == "TRAIN":
             labels.append(pair['label'])
-    
-    
+
+
     premise_sentences = np.stack([fit_to_size(x, (max_premise_length, word_dimension))
                       for x in premise_sentences])
-    
+
     hyp_sentences = np.stack([fit_to_size(x, (max_hypothesis_length, word_dimension))
                   for x  in hyp_sentences])
-    
+
     if datatype == "TRAIN":
         return add_sentence_tags(premise_sentences, hyp_sentences), labels
     else:

@@ -26,7 +26,7 @@ stop_words = None
 def load_model():
     stop_words = stopwords.words('english')
     GoogleNews_word2vec_pickle = "../data/similarity/GoogleNews-vectors-negative300.pickle"
-    
+
     print('-'*50)
     print('Check if pre-trained Word2vec model trained on Google News corpus exists in disk')
     if os.path.exists(GoogleNews_word2vec_pickle): 
@@ -52,7 +52,7 @@ def load_model():
             pickle.dump(model, open(GoogleNews_word2vec_pickle, 'wb'))
             print("Model pickled")
             return stop_words, model
-        
+
         except:
             print("\tThe Google News dataset is not downloaded yet.")
 
@@ -72,8 +72,7 @@ def find_similarity(text_A, text_B):
     text_B = text_B.lower().split()
     text_A = [w for w in text_A if w not in stop_words]
     text_B = [w for w in text_B if w not in stop_words]
-    distance = model.wmdistance(text_A, text_B) 
-    return distance
+    return model.wmdistance(text_A, text_B)
 
 """
 Description:    Finds out at which positions the word appears in a list of words.
@@ -81,13 +80,7 @@ Input:          List of words.
 Output:         Positions where the word appears.  
 """
 def find_indexes_in_text(list_words, word):  
-    indexes = []
-    i = 0
-    while i<len(list_words):  
-        if list_words[i] == word:
-            indexes.append(i) 
-        i = i+1
-    return indexes
+    return [i for i in range(len(list_words)) if list_words[i] == word]
 
 """
 Description:    Finds out the ngrams containing the word and returns a list of such phrases.  
@@ -99,32 +92,32 @@ def return_negation_phrases_from_text(text, word, ngram):
     if ' ' in word: 
         word = word.replace(' ','') 
         text = text.replace(original_word, word) 
-        
+
     list_words = text.split()
-    pad_word = ' ' + word + ' '
+    pad_word = f' {word} '
     return_phrases = []
     phrase = '' 
 
     if pad_word in text:  
         if ngram % 2 == 0: ngram = ngram + 1
         low_lim = (ngram // 2) * (-1)
-        upp_lim = (ngram //2) 
+        upp_lim = (ngram //2)
         i = low_lim
-        
+
         indexes_of_word = find_indexes_in_text(list_words, word) 
-        
+
         for index in indexes_of_word:
             list_words[index] = list_words[index].replace(word, original_word)
             while i<= upp_lim:
                 try:
-                    phrase = phrase + ' ' + list_words[index + i]
+                    phrase = f'{phrase} {list_words[index + i]}'
                 except Exception:
-                    phrase = phrase 
+                    phrase = phrase
                 i = i + 1
             phrase = phrase.strip()
-            return_phrases.append(phrase) 
+            return_phrases.append(phrase)
             phrase = ''
-            i = low_lim 
+            i = low_lim
     return return_phrases
 
 
@@ -135,27 +128,27 @@ Output:         Vector (one hot encoded)
 """
 def get_sim_vector_for_pair(text1, text2, ngram = 4, word = 'not'):
     text1_phrases = return_negation_phrases_from_text(text1, word, ngram)
-    text2_phrases = return_negation_phrases_from_text(text2, word, ngram) 
+    text2_phrases = return_negation_phrases_from_text(text2, word, ngram)
     distance = find_similarity(text1, text2) 
-    
-    if 0 <= distance and distance <= 0.2:     vector = [1,0,0,0,0,0,0]
-    if 0.2 < distance and distance <= 0.4:    vector = [0,1,0,0,0,0,0]
-    if 0.4 < distance and distance <= 0.6:    vector = [0,0,1,0,0,0,0]
-    if 0.6 < distance and distance <= 0.8:    vector = [0,0,0,1,0,0,0]
-    if 0.8 < distance and distance <= 1.0:    vector = [0,0,0,0,1,0,0]
-    if 1.0 < distance and distance != 'inf':  vector = [0,0,0,0,0,1,0]
+
+    if 0 <= distance <= 0.2:     vector = [1,0,0,0,0,0,0]
+    if 0.2 < distance <= 0.4:    vector = [0,1,0,0,0,0,0]
+    if 0.4 < distance <= 0.6:    vector = [0,0,1,0,0,0,0]
+    if 0.6 < distance <= 0.8:    vector = [0,0,0,1,0,0,0]
+    if 0.8 < distance <= 1.0:    vector = [0,0,0,0,1,0,0]
+    if distance > 1.0 and distance != 'inf':  vector = [0,0,0,0,0,1,0]
     if distance == 'inf':                     vector = [0,0,0,0,0,0,1] 
-  
+
     if text1_phrases and text2_phrases:       
-        add_vector = [0,0,0,1] 
-    elif text1_phrases and not text2_phrases: 
-        add_vector = [0,1,0,0] 
-    elif text2_phrases and not text1_phrases: 
-        add_vector = [0,0,1,0] 
+        add_vector = [0,0,0,1]
+    elif text1_phrases: 
+        add_vector = [0,1,0,0]
+    elif text2_phrases: 
+        add_vector = [0,0,1,0]
     else:                                     
         add_vector = [0,0,0,0] 
-        
+
     for element in add_vector:
         vector.append(element) 
-    
+
     return vector

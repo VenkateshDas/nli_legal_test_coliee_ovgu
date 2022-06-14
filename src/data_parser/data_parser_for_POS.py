@@ -53,7 +53,7 @@ def to_universal(tagged_words):
     return [(word, PTB_UNIVERSAL_MAP[tag]) for word, tag in tagged_words]
 
 def get_POS_tags(text):
-    pos_tagged = to_universal([(word, tag) for word, tag in pos_tag(word_tokenize(text))])
+    pos_tagged = to_universal(list(pos_tag(word_tokenize(text))))
     pos_tagged = pd.DataFrame(pos_tagged, columns=['word', 'tag'])
     return pos_tagged
 
@@ -83,7 +83,7 @@ def sentence2sequence(sentence):
     
     pos_tagged = get_POS_tags(sentence)
     vocabulary = list(pos_tagged[pos_tagged.columns[0]])
-      
+
     rows, words = [], []
     for word in vocabulary:
         word = word.strip()
@@ -92,24 +92,22 @@ def sentence2sequence(sentence):
         else:
             rows.append(np.zeros((word_dimension)))
         words.append(word)    
-        
+
     words_omitted_by_law2vec = list(set(vocabulary) - set(words))
     pos_tagged = pos_tagged[~pos_tagged['word'].isin(words_omitted_by_law2vec)].reset_index(drop=True)
     finalized_tags = pos_tagged[pos_tagged.columns[1]]
     #one hot encoding the pos tags
     finalized_tags = pd.get_dummies(finalized_tags)
-    
-    #find remaining categories of POS tags in POS_categories which were not present in the current sentence
-    remaining_categories = list(POS_categories - set(list(finalized_tags)))
-    
-    #append those remaining categories to finalized_tags and sort them.
-    if remaining_categories:
+
+    if remaining_categories := list(
+        POS_categories - set(list(finalized_tags))
+    ):
         empty_df = pd.DataFrame(0, index=np.arange(len(words)), columns=remaining_categories)
         finalized_tags = pd.concat([finalized_tags, empty_df], axis=1)
     finalized_tags = finalized_tags.reindex(sorted(finalized_tags.columns), axis=1)
     finalized_tags = finalized_tags.to_numpy()
     rows = np.vstack(rows)
-    
+
     return (rows, finalized_tags)
 
     
@@ -125,7 +123,7 @@ def add_sentence_tags(premise, hyp, word_dim, tag_dim):
     BOS = np.concatenate((law2vec_wordmap["BOS"], np.full((tag_dimension), 0)), axis=None)
     SEP = np.concatenate((law2vec_wordmap["SEP"], np.full((tag_dimension), 0)), axis=None)
     EOS = np.concatenate((law2vec_wordmap["EOS"], np.full((tag_dimension), 0)), axis=None)
-    
+
     # Reshaping vector of shape (1, word_dimension) to (1, 1, word_dimension)
     #   This means: 1 sentence consists of 1 word of 'word_dimension' dimensions
     # Tile operation: The reshaped vector is duplicated 627 times (total number of sentences): Now it becomes (627, 1, word_dimension)
@@ -137,9 +135,7 @@ def add_sentence_tags(premise, hyp, word_dim, tag_dim):
     BOS_premise = np.concatenate((BOS, premise), axis=1)                            # concat BOS vector to beginning of premise:- Concatenate to axis 1, since it is word-level concatenation 
     BOS_premise_SEP = np.concatenate((BOS_premise, SEP), axis=1)                    # concat SEP to end of premise 
     BOS_premise_SEP_hyp = np.concatenate((BOS_premise_SEP, hyp), axis=1)            # concat hypothesis to end of SEP
-    BOS_premise_SEP_hyp_EOS = np.concatenate((BOS_premise_SEP_hyp, EOS), axis=1)    # concat EOS to end of hypothesis
-    
-    return BOS_premise_SEP_hyp_EOS
+    return np.concatenate((BOS_premise_SEP_hyp, EOS), axis=1)
 
 
 
@@ -152,32 +148,32 @@ def get_data(preprocessed_json_file, datatype="TRAIN"):
                         TEST  - refers to test set. Preprocessed test set does not have 'labels' included within the json. It is in a separate txt file
     Output:         Output of add_sentence_tags() method, labels (only for datatype=TRAIN)
     '''
-    
+
     global max_premise_length, max_hypothesis_length, word_dimension, POS_categories
     with open(preprocessed_json_file, 'r') as fp:   
         data = json.load(fp)
-    
+
     premise_sentences = []
     hyp_sentences = []
     labels = [] 
     premise_tags = []
     hyp_tags = []
-    
+
     for _, pair in data.items():
         premise = sentence2sequence(pair['text1'])          # pair['text1'] represents premise sentence
         premise_sentences.append(np.vstack(premise[0]))
         premise_tags.append(premise[1])
-        
+
         hyp = sentence2sequence(pair['text2'])              # pair['text2'] represents hypothesis sentence
         hyp_sentences.append(np.vstack(hyp[0]))
         hyp_tags.append(hyp[1])
-        
+
         if datatype == "TRAIN":
             labels.append(pair['label'])
-    
+
     premise_sentences = np.stack([fit_to_size(sent, tag, (max_premise_length, word_dimension)) for sent, tag in zip(premise_sentences, premise_tags)])
     hyp_sentences = np.stack([fit_to_size(sent, tag, (max_hypothesis_length, word_dimension)) for sent, tag in zip(hyp_sentences, hyp_tags)])
-    
+
     if datatype == "TRAIN":
         return add_sentence_tags(premise_sentences, hyp_sentences, word_dimension, tag_dimension), labels
     else:

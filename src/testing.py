@@ -5,6 +5,7 @@ Created on Sat May  2 10:32:46 2020
 @author: Sachin Nandakumar
 """
 
+
 '''#######################################################
                         TESTING
 #######################################################'''
@@ -33,9 +34,9 @@ else:
     PREPROCESSED_TEST_SET = pre.get_data(RAW_TEST_DATA, "TEST")     # Run preprocessing of test_set
     with open('../data/preprocessed_data/preprocessed_test_set.json', 'w') as fp:             
         json.dump(PREPROCESSED_TEST_SET, fp)                        # Dump the preprocessed json file
-        
+
     print('\nPreprocessing of Test Set Complete!')
-    print('File {} saved to {}'.format('preprocessed_test_set.json',"../data/preprocessed_data/"))
+    print('File preprocessed_test_set.json saved to ../data/preprocessed_data/')
 
 
 
@@ -48,9 +49,7 @@ print('\nTest set parsing complete.')
 
 y_test = []                                                         # Read labels from text file
 with open(LABELS_FILE, "r", errors='ignore') as test_labels:        
-    for line in test_labels:
-        y_test.append(line.split(' ')[1])
-
+    y_test.extend(line.split(' ')[1] for line in test_labels)
 y_test = to_categorical(y_test)                                     # Categorize labels into binary format
 
 
@@ -66,7 +65,7 @@ Define & initialize constants for lstm architecture
 #num_hidden = {1: 128, 2: 64}            # dictionary that defines number of neurons per layer 
 #num_classes = 2                         # total number of classes
 #num_layers = 1                          # desired number of LSTM layers
-    
+
 
 
 '''################################################
