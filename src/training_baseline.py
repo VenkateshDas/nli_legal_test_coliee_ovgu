@@ -62,7 +62,7 @@ timesteps = X_train.shape[1]            # timesteps
 num_hidden = {1: 100, 2: 64}            # dictionary that defines number of neurons per layer 
 num_classes = 2                         # total number of classes
 num_layers = 1                          # desired number of LSTM layers
-    
+
 weight_decay = 1e-06                    # hyperparameter for regularizer
 
 del premise_hypo_pair, correct_labels   # delete unused variables to free RAM
@@ -114,24 +114,24 @@ def BiRNN(x, weights, bias):
     '''
     x = tf.unstack(x, timesteps, 1)
     output = x   
-    
+
     for i in range(num_layers):
-       lstm_fw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define forward lstm cell with hidden cells
-       lstm_fw_cell = rnn.DropoutWrapper(lstm_fw_cell, output_keep_prob=0.5)                               # define dropout over hidden forward lstm cell
-       lstm_bw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define backward lstm cell with hidden cells
-       lstm_bw_cell = rnn.DropoutWrapper(lstm_bw_cell,  output_keep_prob=0.5)                              # define dropout over hidden backward lstm cell
-            
-       with tf.compat.v1.variable_scope('lstm'+str(i)):
+        lstm_fw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define forward lstm cell with hidden cells
+        lstm_fw_cell = rnn.DropoutWrapper(lstm_fw_cell, output_keep_prob=0.5)                               # define dropout over hidden forward lstm cell
+        lstm_bw_cell = rnn.BasicLSTMCell(num_hidden[i+1], forget_bias=1.0, activation=tf.nn.relu)           # define backward lstm cell with hidden cells
+        lstm_bw_cell = rnn.DropoutWrapper(lstm_bw_cell,  output_keep_prob=0.5)                              # define dropout over hidden backward lstm cell
+
+        with tf.compat.v1.variable_scope(f'lstm{str(i)}'):
             try:
                 output, state_fw, state_bw = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, output, dtype=tf.float32)
             except Exception: # Old TensorFlow version only returns outputs not states
                 output = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, output, dtype=tf.float32)
-            
-            
+
+
             # Venky: rnn cell output  --> currently this is not used for LSTMVis
             outputs = tf.unstack(output, timesteps, 0)
             outputs = tf.transpose(outputs, perm=[1, 0, 2]) 
-    
+
     return tf.add(tf.matmul(output[-1], weights['out']), bias['out']), outputs
     
 '''############################################################
@@ -170,19 +170,17 @@ Begin training
 #######################################################'''
 
 def save_LSTM_states(states_inter, state_val, SAVE_STATES_TO):
-    final_states = []
     states_inter = np.vstack(states_inter)
-    final_states.append(states_inter)                       # append training_states to final_states 
-    final_states.append(np.array(state_val))                # append validation_states to final_states
+    final_states = [states_inter, np.array(state_val)]
     val_1 = final_states[0][0]
-    for k in range(len(final_states)):
-        for i in range(0,len(final_states[k])):
-            temp = final_states[k][i]
+    for final_state in final_states:
+        for i in range(len(final_state)):
+            temp = final_state[i]
             val_1 = np.concatenate((val_1,temp),axis=0)
     print('\nSaving LSTM states...')
     with h5py.File(SAVE_STATES_TO, 'w') as hf:
         hf.create_dataset("d1",  data= val_1)
-    print('LSTM states saved to {}'.format(SAVE_STATES_TO))
+    print(f'LSTM states saved to {SAVE_STATES_TO}')
 
 def run_train(session, train_x, train_y):
     '''
@@ -199,11 +197,11 @@ def run_train(session, train_x, train_y):
     loss_results = []
     train_counter = 0
     validation_counter = 0
-    
+
     training_steps = 10000  # epochs
     batch_size = 128        # batch size
     display_step = 10       # displays 
-    
+
     #for early stopping :    
     best_loss_val=1000000   # initializing best validation loss to a higher value.
     best_train_acc = 0      # best training accuracy
@@ -211,54 +209,63 @@ def run_train(session, train_x, train_y):
     patience= 10            # the number of epochs without improvement you allow before training should be aborted
     average_loss_baseline = 0.74
     # since the values are updated every 10th iteration, the stopping limit becomes: (patience * 10)
-    
+
     costs = []              # validation costs history
     costs_inter=[]          # intermediate validation costs. These values are only used as a log to keep track of the costs.
     best_loss_observed_epoch = 0
-    
+
     ###################################################
-    
+
     session.run(tf.compat.v1.global_variables_initializer())                        # initialize all variables using session
-    for epoch in range(1, training_steps + 1):                                      # training iterations
+    for epoch in range(1, training_steps + 1):                                  # training iterations
         train_x, train_y = shuffle(train_x, train_y)
         inner_split = train_x.shape[0] // batch_size                                # creating batches 
         states_inter = []
-        
+
         for i in range(inner_split + 1):
             batch_x = train_x[i*batch_size:(i+1)*batch_size]                        # generating batches of X_train
             batch_y = train_y[i*batch_size:(i+1)*batch_size]                        # generating batches of y_train
             session.run(train_op, feed_dict={X: batch_x, y: batch_y})
-            
-            if epoch == 1 or epoch % display_step == 0:                             # print and save necessary information about training only at an interval of 'display_step' number of steps to reduce computational complexity
+
+            if epoch == 1 or epoch % display_step == 0:                 # print and save necessary information about training only at an interval of 'display_step' number of steps to reduce computational complexity
                 
                 state_train = session.run([output], feed_dict={X: batch_x, y: batch_y})     # extract states for each batch-wise training inputs
                 states_inter.append(np.array(state_train)[0])
-            
-                if i == inner_split:                                                # last batch split of the selected epoch 
+
+                if i == inner_split:                                # last batch split of the selected epoch 
                     summary, loss_train, acc_train = session.run([merged, loss_op, accuracy], feed_dict={X: batch_x, y: batch_y})
                     train_writer.add_summary(summary, train_counter)
-                    
+
                     summary, loss_val, acc_val, state_val = session.run([merged, loss_op, accuracy, output], feed_dict={X: X_val, y: y_val})
                     validation_writer.add_summary(summary, validation_counter)
                     train_counter+=display_step
                     validation_counter+=display_step
-                    
-                    print("Epoch {}, Batch Split {}".format(epoch, i+1) + ", Minibatch Loss= " + \
-                      "{:.4f}".format(loss_train) + ", Minibatch Training Accuracy= " + \
-                      "{:.3f}".format(acc_train))
+
+                    print(
+                        (
+                            (
+                                f"Epoch {epoch}, Batch Split {i + 1}"
+                                + ", Minibatch Loss= "
+                                + "{:.4f}".format(loss_train)
+                            )
+                            + ", Minibatch Training Accuracy= "
+                        )
+                        + "{:.3f}".format(acc_train)
+                    )
+
                     print(" Validation Loss = {:.4f}".format(loss_val) + ", Validation Accuracy= {:.3f}".format(acc_val))
-                    
+
                     acc_results.append(acc_train)
                     loss_results.append(loss_train)
-                    
+
                     #...... BEGIN EARLY STOPPING EVALUATION ......
-                    
+
                     # CONDITION: 
                     # 1. If validation loss has not decreased since 'patience' steps
                     #   1.1. If the average of last 'patience' iterations are less than 'average_loss_baseline'
-                    
+
                     costs_inter.append(loss_val)            # append validation loss to costs_inter
-                    
+
                     if loss_val < best_loss_val:            # if improved validation loss found
                         best_loss_val = loss_val            # set current validation loss to best_loss_val
                         best_train_acc = acc_train          # set current training accuracy to best_train_acc
@@ -269,47 +276,66 @@ def run_train(session, train_x, train_y):
                         best_loss_observed_epoch = epoch
                     else:
                         last_improvement +=1                # else, increment last_improvement
-                        
+
                     if last_improvement > patience:         # if no improvement seen over 'patience' number of steps
                         print("\nNo improvement found during the last {} iterations".format(patience))
                         print('Avg validation loss over this period: ', sum(costs_inter)/len(costs_inter))  
-                        
+
                         if (sum(costs_inter)/len(costs_inter)) > average_loss_baseline:      # if average of validation loss greater than 'average_loss_baseline' (a hyper-parameter to optimize)      
                             # final stopping condition
                             print('Avg validation loss > {}\nStopping optimization'.format(average_loss_baseline))
                             print('Recording training and validation states at cost of early-stopping')
-                            save_LSTM_states(states_inter, state_val, SAVE_STATES_TO+'-final.hdf5')
+                            save_LSTM_states(states_inter, state_val, f'{SAVE_STATES_TO}-final.hdf5')
                             return acc_results, loss_results
-                        else:                                                   # else, save checkpoint and reset costs_inter and last_improvement
+                        else:                           # else, save checkpoint and reset costs_inter and last_improvement
                             print('\nSaving Checkpoint! Avg validation loss < {}'.format(average_loss_baseline))
-                            _ = saver.save(session, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)
+                            _ = saver.save(
+                                session,
+                                SAVE_MODEL_TO
+                                + f"m_{acc_train}_{acc_val}.ckpt",
+                                global_step=epoch,
+                            )
+
                             print('<<<Model Checkpoint saved>>>')
                             print('<<<State Checkpoint saved>>>')
-                            save_LSTM_states(states_inter, state_val, SAVE_STATES_TO+'-'+str(epoch)+'.hdf5')
-                            
-                            print('Last improvement was: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
-                            
+                            save_LSTM_states(
+                                states_inter,
+                                state_val,
+                                f'{SAVE_STATES_TO}-{str(epoch)}.hdf5',
+                            )
+
+
+                            print(
+                                f'Last improvement was: Training acc = {best_train_acc}, Validation acc = {best_val_acc} observed at {best_loss_observed_epoch}'
+                            )
+
+
                             # to_log = 'Best result: m_{}_{}.ckpt-{}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)
                             # file_op = open(TRAINING_LOG,"a+") 
                             # file_op.write(to_log + '\n')
                             # file_op.close()
-                            
+
                             print('Continuing Training...\n')
                             costs_inter = []
                             last_improvement = 0
                             best_loss_val = 1000000
                             best_train_acc = 0  
-                            
-                    
+
+
                     #...... END EARLY STOPPING EVALUATION ......
-                    
-                    if epoch == training_steps:                                 # do not change this intendation to make sure this line run only once and not for each split of the epoch!
-                        _ = saver.save(session, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)                         # save model to local
+
+                    if epoch == training_steps:             # do not change this intendation to make sure this line run only once and not for each split of the epoch!
+                        _ = saver.save(
+                            session,
+                            SAVE_MODEL_TO + f"m_{acc_train}_{acc_val}.ckpt",
+                            global_step=epoch,
+                        )
+
                         print('Recording final training and validation states')
                         # append states to list before ending training
-                        save_LSTM_states(states_inter, state_val, SAVE_STATES_TO+'-final.hdf5')
+                        save_LSTM_states(states_inter, state_val, f'{SAVE_STATES_TO}-final.hdf5')
                         print('\nBest result: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
-                        
+
     return acc_results, loss_results
         
 
@@ -318,14 +344,17 @@ with tf.compat.v1.Session() as sess:
     # Log for tensorboard visualization
     logdir = os.path.join(SAVE_LOGS_TO, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     merged = tf.compat.v1.summary.merge_all()
-    train_writer = tf.compat.v1.summary.FileWriter(logdir + '/train', sess.graph)
-    validation_writer = tf.compat.v1.summary.FileWriter(logdir + '/validation')
-    
+    train_writer = tf.compat.v1.summary.FileWriter(f'{logdir}/train', sess.graph)
+    validation_writer = tf.compat.v1.summary.FileWriter(f'{logdir}/validation')
+
     start_time = datetime.datetime.now()
     print('-'*50)
     print('\nSession started at: {}'.format(start_time))
     acc_results, loss_results = run_train(sess, X_train, y_train)
 #    summary, loss_val, acc_test, pred_test = sess.run([merged, loss_op, accuracy, prediction, output], feed_dict={X: X_test, y: y_test})
-    print('Training performance: Accuracy {}, Loss {}'.format(acc_results[-1], loss_results[-1]))
+    print(
+        f'Training performance: Accuracy {acc_results[-1]}, Loss {loss_results[-1]}'
+    )
+
     end_time = datetime.datetime.now()
-    print('Total Execution time: {} minutes'.format(end_time - start_time))
+    print(f'Total Execution time: {end_time - start_time} minutes')

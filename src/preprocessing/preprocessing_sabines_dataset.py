@@ -31,43 +31,44 @@ def fit_to_size(matrix, shape):
 
 def get_data(data_file, data_type="TRAIN"):
     file_path = data_file
-    train_json = dict()
+    train_json = {}
     xmlp = ET.XMLParser(encoding="utf-8")
     tree = ET.parse(file_path, parser = xmlp)
-    root = tree.getroot()  
+    root = tree.getroot()
     pbar = tqdm(total=len(root.findall('pair')))
-    
+
     print('\nLoading premise and hypothesis sentences from disk...')
     print('-'*55)
     for id, pair in enumerate(root.findall('pair')):
 #      pair_ID = pair.find('pair id').text 
-      text1 = pair.find('t1').text 
-      text2 = pair.find('t2').text 
-      
-      preprocessed_premise = pre.process(text1)
-      preprocessed_hyp = pre.process(text2)
-      
-      temp = dict()
-      temp['text1'] = preprocessed_premise.lstrip()
-      temp['text2'] = preprocessed_hyp.lstrip()
-      
-      if data_type == "TRAIN":
-          label = pair.find('Label').text 
-          if label == 'Y': label = 1
-          if label == 'N': label = 0
-          temp['label'] = label
-      
-      train_json[id] = temp
-      pbar.update(1)
-      
+        text1 = pair.find('t1').text
+        text2 = pair.find('t2').text 
+
+        preprocessed_premise = pre.process(text1)
+        preprocessed_hyp = pre.process(text2)
+
+        temp = {'text1': preprocessed_premise.lstrip()}
+        temp['text2'] = preprocessed_hyp.lstrip()
+
+        if data_type == "TRAIN":
+            label = pair.find('Label').text 
+            if label == 'Y': label = 1
+            if label == 'N': label = 0
+            temp['label'] = label
+
+        train_json[id] = temp
+        pbar.update(1)
+
     return train_json
 
 if __name__ == "__main__":
     all_sentences = get_data(RAW_TRAIN_DATA)
-        
+
     with open('../../data/preprocessed_data/preprocessed_training_set.json', 'w') as fp:
         json.dump(all_sentences, fp)    
-        
+
     print('Preprocessing Complete!')
-    
-    print('File {} saved to {}'.format('preprocessed_training_set.json', '../../data/preprocessed_data/'))
+
+    print(
+        'File preprocessed_training_set.json saved to ../../data/preprocessed_data/'
+    )

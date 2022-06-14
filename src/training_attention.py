@@ -123,7 +123,7 @@ def BiRNN(x, weights, bias):
         output = tf.nn.relu(tf.matmul(output, tf.cast(weights['w1'], tf.float32)) + bias['b1'])     # weights introduced to use relu activation
         output = tf.unstack(output, timesteps, 0)
 
-        with tf.compat.v1.variable_scope('lstm'+str(i)):
+        with tf.compat.v1.variable_scope(f'lstm{str(i)}'):
             try:
                 output, state_fw, state_bw = rnn.static_bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, output, dtype=tf.float32)
             except Exception: # Old TensorFlow version only returns outputs not states
@@ -243,7 +243,7 @@ def run_train(session, train_x, train_y):
     ###################################################
 
     session.run(tf.compat.v1.global_variables_initializer())                        # initialize all variables using session
-    for epoch in range(1, training_steps + 1):                                      # training iterations
+    for epoch in range(1, training_steps + 1):                                  # training iterations
 #         train_x, train_y = shuffle(train_x, train_y)
         inner_split = train_x.shape[0] // batch_size                                # creating batches
         states_inter = []
@@ -256,7 +256,7 @@ def run_train(session, train_x, train_y):
             batch_y = train_y[i*batch_size:(i+1)*batch_size]                        # generating batches of y_train
             session.run(train_op, feed_dict={X: batch_x, y: batch_y})
 
-            if epoch == 1 or epoch % display_step == 0:                             # print and save necessary information about training only at an interval of 'display_step' number of steps to reduce computational complexity
+            if epoch == 1 or epoch % display_step == 0:                 # print and save necessary information about training only at an interval of 'display_step' number of steps to reduce computational complexity
 
                 state_train , attention_train  = session.run([output,attention_score], feed_dict={X: batch_x, y: batch_y})     # extract states for each batch-wise training inputs
                 print(state_train.shape)
@@ -264,7 +264,7 @@ def run_train(session, train_x, train_y):
                 print(len(states_inter))
                 scores_inter.append(np.array(attention_train))
                 print(len(states_inter))
-                if i == inner_split:                                                # last batch split of the selected epoch
+                if i == inner_split:                                # last batch split of the selected epoch
                     summary, loss_train, acc_train = session.run([merged, loss_op, accuracy], feed_dict={X: batch_x, y: batch_y})
                     train_writer.add_summary(summary, train_counter)
 
@@ -273,9 +273,18 @@ def run_train(session, train_x, train_y):
                     train_counter+=display_step
                     validation_counter+=display_step
 
-                    print("Epoch {}, Batch Split {}".format(epoch, i+1) + ", Minibatch Loss= " + \
-                      "{:.4f}".format(loss_train) + ", Minibatch Training Accuracy= " + \
-                      "{:.3f}".format(acc_train))
+                    print(
+                        (
+                            (
+                                f"Epoch {epoch}, Batch Split {i + 1}"
+                                + ", Minibatch Loss= "
+                                + "{:.4f}".format(loss_train)
+                            )
+                            + ", Minibatch Training Accuracy= "
+                        )
+                        + "{:.3f}".format(acc_train)
+                    )
+
                     print(" Validation Loss = {:.4f}".format(loss_val) + ", Validation Accuracy= {:.3f}".format(acc_val))
 
                     acc_results.append(acc_train)
@@ -300,7 +309,7 @@ def run_train(session, train_x, train_y):
                     else:
                         last_improvement +=1                # else, increment last_improvement
 
-                    if last_improvement > patience:                         # if no improvement seen over 'patience' number of steps
+                    if last_improvement > patience:     # if no improvement seen over 'patience' number of steps
                         print("\nNo improvement found during the last {} iterations".format(patience))
                         print('Avg validation loss over this period: ', sum(costs_inter)/len(costs_inter))
                         if (sum(costs_inter)/len(costs_inter)) > 0.72:      # if average of validation loss greater than 0.72 (a hyper-parameter to optimize)
@@ -310,24 +319,29 @@ def run_train(session, train_x, train_y):
                             # append states to list before stopping training
                             states_inter = np.vstack(states_inter)
                             print(states_inter.shape)
-                            final_states.append(states_inter)                       # append training_states to final_states
-                            final_states.append(np.array(state_val))                # append validation_states to final_states
+                            final_states.extend((states_inter, np.array(state_val)))
                             scores_inter = np.vstack(scores_inter)
-                            attention_scores.append(scores_inter)
-                            attention_scores.append(np.array(attention_val))
-
+                            attention_scores.extend((scores_inter, np.array(attention_val)))
                             return acc_results, loss_results, final_states , attention_scores
-                        else:                                                   # else, save checkpoint and reset costs_inter and last_improvement
+                        else:                           # else, save checkpoint and reset costs_inter and last_improvement
                             print('\nSaving Checkpoint! Avg validation loss < 0.72')
-                            _ = saver.save(session, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)
+                            _ = saver.save(
+                                session,
+                                SAVE_MODEL_TO
+                                + f"m_{acc_train}_{acc_val}.ckpt",
+                                global_step=epoch,
+                            )
+
                             print('<<<Checkpoint saved>>>')
-                            print('Last improvement: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
+                            print(
+                                f'Last improvement: Training acc = {best_train_acc}, Validation acc = {best_val_acc} observed at {best_loss_observed_epoch}'
+                            )
 
-                            to_log = 'Best result: m_{}_{}.ckpt-{}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)
-                            file_op = open(TRAINING_LOG,"a+")
-                            file_op.write(to_log + '\n')
-                            file_op.close()
 
+                            to_log = f'Best result: m_{best_train_acc}_{best_val_acc}.ckpt-{best_loss_observed_epoch}'
+
+                            with open(TRAINING_LOG,"a+") as file_op:
+                                file_op.write(to_log + '\n')
                             print('Continuing Training...')
                             costs_inter = []
                             last_improvement = 0
@@ -337,24 +351,26 @@ def run_train(session, train_x, train_y):
 
                     #...... END EARLY STOPPING EVALUATION ......
 
-                    if epoch == training_steps:                                 # do not change this intendation to make sure this line run only once and not for each split of the epoch!
-                        _ = saver.save(session, SAVE_MODEL_TO+"m_{}_{}.ckpt".format(acc_train, acc_val), global_step=epoch)                         # save model to local
+                    if epoch == training_steps:             # do not change this intendation to make sure this line run only once and not for each split of the epoch!
+                        _ = saver.save(
+                            session,
+                            SAVE_MODEL_TO + f"m_{acc_train}_{acc_val}.ckpt",
+                            global_step=epoch,
+                        )
+
 
                         print('Recording final training and validation states')
                         # append states to list before ending training
                         states_inter = np.vstack(states_inter)
                         print(states_inter.shape)
-                        final_states.append(states_inter)                       # append training_states to final_states
-                        final_states.append(np.array(state_val))                # append validation_states to final_states
+                        final_states.extend((states_inter, np.array(state_val)))
                         scores_inter = np.vstack(scores_inter)
-                        attention_scores.append(scores_inter)
-                        attention_scores.append(np.array(attention_val))
-
+                        attention_scores.extend((scores_inter, np.array(attention_val)))
                         print('\nBest result: Training acc = {}, Validation acc = {} observed at {}'.format(best_train_acc, best_val_acc, best_loss_observed_epoch)) # the best result seen before 'no improvements'
 
     print(final_states[0].shape, final_states[1].shape)
     print(attention_scores[0].shape, attention_scores[1].shape)
-    print("Total attention list " + str(len(attention_scores)))
+    print(f"Total attention list {len(attention_scores)}")
     return acc_results, loss_results, final_states, attention_scores
 
 
@@ -363,27 +379,30 @@ with tf.compat.v1.Session() as sess:
     # Log for tensorboard visualization
     logdir = os.path.join(SAVE_LOGS_TO, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     merged = tf.compat.v1.summary.merge_all()
-    train_writer = tf.compat.v1.summary.FileWriter(logdir + '/train', sess.graph)
-    validation_writer = tf.compat.v1.summary.FileWriter(logdir + '/validation')
+    train_writer = tf.compat.v1.summary.FileWriter(f'{logdir}/train', sess.graph)
+    validation_writer = tf.compat.v1.summary.FileWriter(f'{logdir}/validation')
 
     start_time = datetime.datetime.now()
-    print('Session started at: {}'.format(start_time))
+    print(f'Session started at: {start_time}')
     acc_results, loss_results, final_states , attention_scores = run_train(sess, X_train, y_train)
 #    summary, loss_val, acc_test, pred_test = sess.run([merged, loss_op, accuracy, prediction, output], feed_dict={X: X_test, y: y_test})
-    print('Training performance: Accuracy {}, Loss {}'.format(acc_results[-1], loss_results[-1]))
+    print(
+        f'Training performance: Accuracy {acc_results[-1]}, Loss {loss_results[-1]}'
+    )
+
     end_time = datetime.datetime.now()
-    print('Total Execution time: {} minutes'.format(end_time.minute - start_time.minute))
+    print(f'Total Execution time: {end_time.minute - start_time.minute} minutes')
 
     val_1 = final_states[0][0]
     for k in range(len(final_states)):
-        for i in range(0,len(final_states[k])):
+        for i in range(len(final_states[k])):
             temp = final_states[k][i]
             val_1 = np.concatenate((val_1,temp),axis=0)
 
 
     val_1 = final_states[0][0]
     for k in range(len(final_states)):
-        for i in range(0,len(final_states[k])):
+        for i in range(len(final_states[k])):
             temp = final_states[k][i]
             val_1 = np.concatenate((val_1,temp),axis=0)
 
@@ -393,11 +412,11 @@ with tf.compat.v1.Session() as sess:
     with h5py.File(SAVE_STATES_TO, 'w') as hf:
         hf.create_dataset("d1",  data= val_1)
 
-    print('LSTM states saved to {}\{}'.format(os.getcwd(), SAVE_STATES_TO))
+    print(f'LSTM states saved to {os.getcwd()}\\{SAVE_STATES_TO}')
 
     f = open(SAVE_SCORES_TO,'wb')
     pickle.dump(attention_scores,f)
 
-    print('Attention scores saved to {}\{}'.format(os.getcwd(), SAVE_SCORES_TO))
+    print(f'Attention scores saved to {os.getcwd()}\\{SAVE_SCORES_TO}')
 
     

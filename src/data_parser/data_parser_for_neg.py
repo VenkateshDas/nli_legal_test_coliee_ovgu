@@ -82,17 +82,15 @@ def add_sentence_tags(premise, hyp, sim_vectors):
     BOS = np.tile(np.reshape(law2vec_wordmap["BOS"], (1, 1, word_dimension)),(premise.shape[0],1,1))    # Vector for beginning of sentence
     SEP = np.tile(np.reshape(law2vec_wordmap["SEP"], (1, 1, word_dimension)),(hyp.shape[0],1,1))        # Vector for separator between premise and hypo
     EOS = np.tile(np.reshape(law2vec_wordmap["EOS"], (1, 1, word_dimension)),(hyp.shape[0],1,1))        # Vector for end of sentence
-    
+
     sim_vectors = np.asarray(sim_vectors)
     sim_vectors = np.reshape(sim_vectors, (sim_vectors.shape[0], 1, sim_vectors.shape[1]))
-    
+
     BOS_premise = np.concatenate((BOS, premise), axis=1)                            # concat BOS vector to beginning of premise:- Concatenate to axis 1, since it is word-level concatenation 
     BOS_premise_SEP = np.concatenate((BOS_premise, SEP), axis=1)                    # concat SEP to end of premise 
     BOS_premise_SEP_hyp = np.concatenate((BOS_premise_SEP, hyp), axis=1)            # concat hypothesis to end of SEP
     BOS_premise_SEP_hyp_EOS = np.concatenate((BOS_premise_SEP_hyp, EOS), axis=1)    # concat EOS to end of hypothesis
-    BOS_premise_SEP_hyp_EOS_simneg = np.concatenate((BOS_premise_SEP_hyp_EOS, sim_vectors), axis=1)
-    
-    return BOS_premise_SEP_hyp_EOS_simneg
+    return np.concatenate((BOS_premise_SEP_hyp_EOS, sim_vectors), axis=1)
 
 def get_data(preprocessed_json_file, datatype="TRAIN"):
     '''
@@ -104,38 +102,38 @@ def get_data(preprocessed_json_file, datatype="TRAIN"):
     Output:         Output of add_sentence_tags() method, labels (only for datatype=TRAIN)
     
     '''
-    
+
     global max_premise_length, max_hypothesis_length
     with open(preprocessed_json_file, 'r') as fp:   
         data = json.load(fp)
-    
+
     premise_sentences = []
     hyp_sentences = []
     labels = [] 
-    
+
     sim_vectors = []
-    
+
     for _, pair in data.items():
-        
+
         sim_neg = sn.get_sim_vector_for_pair(pair['text1'], pair['text2'])
         sim_vectors.append(np.stack(sim_neg + [0]*(word_dimension - len(sim_neg))))
-        
+
         premise = sentence2sequence(pair['text1'])          # pair['text1'] represents premise sentence
         hyp = sentence2sequence(pair['text2'])              # pair['text2'] represents hypothesis sentence
-        
+
         premise_sentences.append(np.vstack(premise[0]))
-        
+
         hyp_sentences.append(np.vstack(hyp[0]))
-        
+
         if datatype == "TRAIN":
             labels.append(pair['label'])
-    
+
     premise_sentences = np.stack([fit_to_size(x, (max_premise_length, word_dimension))
                       for x in premise_sentences])
-    
+
     hyp_sentences = np.stack([fit_to_size(x, (max_hypothesis_length, word_dimension))
                   for x in hyp_sentences])
-    
+
     if datatype == "TRAIN":
         return add_sentence_tags(premise_sentences, hyp_sentences, sim_vectors), labels
     else:

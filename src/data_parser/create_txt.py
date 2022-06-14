@@ -74,13 +74,7 @@ for i in range(len(premise)):
         while len(hypothesis[i]) < 80:
             hypothesis[i].append('PAD')
 
-    # if len(hypothesis[i]) > 80:
-    #     print(hypothesis[i])
-    # print("After hypothesis" + str(len(hypothesis[i])))
-
-
-    temp = 'BOS'
-    temp += ' '
+    temp = 'BOS' + ' '
     temp += ' '.join(premise[i])
     temp += ' '
     temp += 'SEP'
@@ -92,20 +86,20 @@ for i in range(len(premise)):
 
     new.append(temp)
 
-print("Total strings : "+ str(len(new)))
+print(f"Total strings : {len(new)}")
 
 with open('output_text.pkl','wb') as t:
     pickle.dump(new,t)
 
 f = open('output_text.txt','w')
-for i in range(len(new)):
-    f.write(new[i])
+for item in new:
+    f.write(item)
 
 sum = 0
 count = 0
 extra = 0
-for i in range(len(new)):
-    text = new[i]
+for item_ in new:
+    text = item_
     text = text.split()
     if len(text) > 283:
         print(len(text))
@@ -114,7 +108,7 @@ for i in range(len(new)):
         # print(text)
     sum += len(text)
 
-print("Total timesteps for 627 instances "+ str(sum))
+print(f"Total timesteps for 627 instances {str(sum)}")
 
-print("Total instances with more than 283 words " + str(count))
-print("Total timesteprs with more than 283 words " + str(extra))
+print(f"Total instances with more than 283 words {str(count)}")
+print(f"Total timesteprs with more than 283 words {str(extra)}")
